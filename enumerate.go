@@ -145,8 +145,6 @@ func getWhois(ip string) (string, string, string) {
 }
 
 func main() {
-	fmt.Println("Enumerate innit")
-
 	logBackend := logging.NewLogBackend(os.Stderr, "", 0)
 	logBackendFormatter := logging.NewBackendFormatter(logBackend, format)
 	leveledLogBackend := logging.AddModuleLevel(logBackend)
