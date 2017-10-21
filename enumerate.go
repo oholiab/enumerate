@@ -19,7 +19,9 @@ var format = logging.MustStringFormatter(
 
 func initRecords(db *sql.DB) {
 	statement := `
-create table records (id integer not null primary key, name text, addr text);
+create table routes (id integer not null primary key, route text, asn text, owner text);
+create table records (id integer not null primary key, name text, addr text, route_id integer not null, foreign key (route_id) references routes(route_id));
+delete from routes;
 delete from records;
 `
 	_, err := db.Exec(statement)
@@ -29,11 +31,16 @@ delete from records;
 }
 
 func ingest(db *sql.DB, hostListFilename string) {
+	var knownRoutes []*net.IPNet
 	tx, err := db.Begin()
 	if err != nil {
 		log.Fatal(err)
 	}
-	stmt, err := tx.Prepare("insert into records(id, name, addr) values(?, ?, ?)")
+	stmt, err := tx.Prepare("insert into records(id, name, addr, route_id) values(?, ?, ?, ?)")
+	if err != nil {
+		log.Fatal(err)
+	}
+	netStmt, err := tx.Prepare("insert into routes(id, route, owner, asn) values(?, ?, ?, ?)")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -51,8 +58,28 @@ func ingest(db *sql.DB, hostListFilename string) {
 		name := scanner.Text()
 		fmt.Println("Ingesting", name)
 		ip := getFirstIp(name)
-		_, err = stmt.Exec(i, name, ip)
-		getWhois(ip)
+		foundNet := false
+		netNumber := 0
+		for j, subnet := range knownRoutes {
+			if subnet.Contains(net.ParseIP(ip)) {
+				foundNet = true
+				netNumber = j
+			}
+		}
+		if foundNet != true {
+			route, asn, netName := getWhois(ip)
+			_, routeNet, err := net.ParseCIDR(route)
+			if err != nil {
+				log.Fatal("Invalid CIDR")
+			}
+			netNumber = len(knownRoutes)
+			_, err = netStmt.Exec(netNumber, route, asn, netName)
+			knownRoutes = append(knownRoutes, routeNet)
+		}
+		_, err = stmt.Exec(i, name, ip, netNumber)
+		if err != nil {
+			log.Fatal(err)
+		}
 		i++
 	}
 	tx.Commit()
@@ -62,7 +89,7 @@ func getFirstIp(name string) string {
 	ips, err := net.LookupIP(name)
 	if err == nil {
 		ip := ips[0].String()
-		log.Debugf("Recording %s for %s", ip, name)
+		log.Debugf("Got %s for %s", ip, name)
 		return ip
 	} else {
 		log.Infof("No record for %s: %v", name, err)
@@ -77,6 +104,7 @@ func getWhois(ip string) (string, string, string) {
 	routeRE := regexp.MustCompile(`(?m:^route: +(.+)$)`)
 	ownerRE := regexp.MustCompile(`(?m:^descr: +(.+)$)`)
 	asnRE := regexp.MustCompile(`(?m:^origin: +(.+)$)`)
+	// FIXME: check $PATH and fail if not present
 	if cmdOut, err := exec.Command("/usr/bin/whois", []string{"-m", ip}...).Output(); err != nil {
 		log.Errorf("Could not retrieve whois recort for %s", ip)
 		return "", "", ""
