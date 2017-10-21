@@ -116,6 +116,7 @@ func getWhois(ip string) (string, string, string) {
 		} else {
 			route = matches[0][1]
 		}
+		// FIXME: this is just giving descr instead of the actual ASN owner
 		matches = ownerRE.FindAllStringSubmatch(string(cmdOut), -1)
 		if len(matches) == 0 {
 			log.Debugf("Could not match descr field")
