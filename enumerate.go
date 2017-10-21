@@ -8,6 +8,8 @@ import (
 	"github.com/op/go-logging"
 	"net"
 	"os"
+	"os/exec"
+	"regexp"
 )
 
 var log = logging.MustGetLogger("enumerate")
@@ -48,7 +50,9 @@ func ingest(db *sql.DB, hostListFilename string) {
 	for scanner.Scan() {
 		name := scanner.Text()
 		fmt.Println("Ingesting", name)
-		_, err = stmt.Exec(i, name, getFirstIp(name))
+		ip := getFirstIp(name)
+		_, err = stmt.Exec(i, name, ip)
+		getWhois(ip)
 		i++
 	}
 	tx.Commit()
@@ -61,8 +65,45 @@ func getFirstIp(name string) string {
 		log.Debugf("Recording %s for %s", ip, name)
 		return ip
 	} else {
-		log.Debugf("No record for %s: %v", name, err)
+		log.Infof("No record for %s: %v", name, err)
 		return ""
+	}
+}
+
+func getWhois(ip string) (string, string, string) {
+	var route string
+	var owner string
+	var asn string
+	routeRE := regexp.MustCompile(`(?m:^route: +(.+)$)`)
+	ownerRE := regexp.MustCompile(`(?m:^descr: +(.+)$)`)
+	asnRE := regexp.MustCompile(`(?m:^origin: +(.+)$)`)
+	if cmdOut, err := exec.Command("/usr/bin/whois", []string{"-m", ip}...).Output(); err != nil {
+		log.Errorf("Could not retrieve whois recort for %s", ip)
+		return "", "", ""
+	} else {
+		matches := routeRE.FindAllStringSubmatch(string(cmdOut), -1)
+		if len(matches) == 0 {
+			log.Debugf("Could not match route field")
+			route = ""
+		} else {
+			route = matches[0][1]
+		}
+		matches = ownerRE.FindAllStringSubmatch(string(cmdOut), -1)
+		if len(matches) == 0 {
+			log.Debugf("Could not match descr field")
+			owner = ""
+		} else {
+			owner = matches[0][1]
+		}
+		matches = asnRE.FindAllStringSubmatch(string(cmdOut), -1)
+		if len(matches) == 0 {
+			log.Debugf("Could not match asn field")
+			asn = ""
+		} else {
+			asn = matches[0][1]
+		}
+		log.Infof("Got ASN:%s Route:%s Owner:%s for ip %s", asn, route, owner, ip)
+		return route, owner, asn
 	}
 }
 
