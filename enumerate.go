@@ -104,8 +104,11 @@ func getWhois(ip string) (string, string, string) {
 	routeRE := regexp.MustCompile(`(?m:^route: +(.+)$)`)
 	ownerRE := regexp.MustCompile(`(?m:^descr: +(.+)$)`)
 	asnRE := regexp.MustCompile(`(?m:^origin: +(.+)$)`)
-	// FIXME: check $PATH and fail if not present
-	if cmdOut, err := exec.Command("/usr/bin/whois", []string{"-m", ip}...).Output(); err != nil {
+	path, err := exec.LookPath("whois")
+	if err != nil {
+		log.Fatal("Must have `whois` binary in $PATH")
+	}
+	if cmdOut, err := exec.Command(path, []string{"-m", ip}...).Output(); err != nil {
 		log.Errorf("Could not retrieve whois recort for %s", ip)
 		return "", "", ""
 	} else {
