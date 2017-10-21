@@ -50,3 +50,11 @@ advertisements, you'll only ever get one.
 Largely though, the point of the tool is enumeration of the ASs for a given
 domain, so this isn't too much of a problem - treat it as a jumping off point
 for further investigation.
+
+# Hacking
+I've vendored dependencies using [dep](https://github.com/golang/dep). With it
+installed:
+
+    git clone https://github.com/oholiab/enumerate
+    cd enumerate
+    make deps
