@@ -102,7 +102,7 @@ func getWhois(ip string) (string, string, string) {
 	var route string
 	var owner string
 	var asn string
-	routeRE := regexp.MustCompile(`(?m:^route: +(.+)$)`)
+	routeRE := regexp.MustCompile(`(?m:^route6?: +(.+)$)`)
 	asnRE := regexp.MustCompile(`(?m:^origin: +(.+)$)`)
 	ownerRE := regexp.MustCompile(`(?m:^as-name: +(.+)$)`)
 	path, err := exec.LookPath("whois")
