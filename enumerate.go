@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"database/sql"
+	"flag"
 	"fmt"
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/op/go-logging"
@@ -152,15 +153,17 @@ func main() {
 	leveledLogBackend.SetLevel(logging.DEBUG, "")
 	logging.SetBackend(leveledLogBackend, logBackendFormatter)
 
-	dbFile := "./enumerate.db"
-	os.Remove(dbFile)
-	db, err := sql.Open("sqlite3", dbFile)
+	dbFile := flag.String("db", "./enumerate.db", "path to output database")
+	domainList := flag.String("list", "./enumerate.txt", "path to domain list")
+	flag.Parse()
+	os.Remove(*dbFile)
+	db, err := sql.Open("sqlite3", *dbFile)
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer db.Close()
 
 	initRecords(db)
-	ingest(db, "./enumerate.txt")
+	ingest(db, *domainList)
 	os.Exit(0)
 }
