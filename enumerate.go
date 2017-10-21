@@ -102,14 +102,14 @@ func getWhois(ip string) (string, string, string) {
 	var owner string
 	var asn string
 	routeRE := regexp.MustCompile(`(?m:^route: +(.+)$)`)
-	ownerRE := regexp.MustCompile(`(?m:^descr: +(.+)$)`)
 	asnRE := regexp.MustCompile(`(?m:^origin: +(.+)$)`)
+	ownerRE := regexp.MustCompile(`(?m:^as-name: +(.+)$)`)
 	path, err := exec.LookPath("whois")
 	if err != nil {
 		log.Fatal("Must have `whois` binary in $PATH")
 	}
 	if cmdOut, err := exec.Command(path, []string{"-m", ip}...).Output(); err != nil {
-		log.Errorf("Could not retrieve whois recort for %s", ip)
+		log.Errorf("Could not retrieve whois report for %s", ip)
 		return "", "", ""
 	} else {
 		matches := routeRE.FindAllStringSubmatch(string(cmdOut), -1)
@@ -119,20 +119,24 @@ func getWhois(ip string) (string, string, string) {
 		} else {
 			route = matches[0][1]
 		}
-		// FIXME: this is just giving descr instead of the actual ASN owner
-		matches = ownerRE.FindAllStringSubmatch(string(cmdOut), -1)
-		if len(matches) == 0 {
-			log.Debugf("Could not match descr field")
-			owner = ""
-		} else {
-			owner = matches[0][1]
-		}
 		matches = asnRE.FindAllStringSubmatch(string(cmdOut), -1)
 		if len(matches) == 0 {
 			log.Debugf("Could not match asn field")
 			asn = ""
 		} else {
 			asn = matches[0][1]
+		}
+		if cmdOut, err = exec.Command(path, []string{"-m", asn}...).Output(); err != nil {
+			log.Errorf("Could not retrieve whois report for %s", ip)
+			owner = ""
+		} else {
+			matches = ownerRE.FindAllStringSubmatch(string(cmdOut), -1)
+			if len(matches) == 0 {
+				log.Debugf("Could not match as-name field")
+				owner = ""
+			} else {
+				owner = matches[0][1]
+			}
 		}
 		log.Infof("Got ASN:%s Route:%s Owner:%s for ip %s", asn, route, owner, ip)
 		return route, owner, asn
