@@ -59,6 +59,9 @@ func ingest(db *sql.DB, hostListFilename string) {
 		name := scanner.Text()
 		fmt.Println("Ingesting", name)
 		ip := getFirstIp(name)
+		if ip == "" {
+			continue
+		}
 		foundNet := false
 		netNumber := 0
 		for j, subnet := range knownRoutes {
