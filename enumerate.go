@@ -31,8 +31,13 @@ delete from records;
 	}
 }
 
-func ingest(db *sql.DB, hostListFilename string) {
+func ingest(db *sql.DB, hostListFilename string) []string {
 	var knownRoutes []*net.IPNet
+	var failed []string
+	_, tenNet, _ := net.ParseCIDR("10.0.0.0/8")
+	_, oneSevenTwoNet, _ := net.ParseCIDR("172.16.0.0/12")
+	_, oneNineTwoNet, _ := net.ParseCIDR("192.168.0.0/16")
+	rfc1918Blocks := []*net.IPNet{tenNet, oneSevenTwoNet, oneNineTwoNet}
 	tx, err := db.Begin()
 	if err != nil {
 		log.Fatal(err)
@@ -63,6 +68,7 @@ func ingest(db *sql.DB, hostListFilename string) {
 			continue
 		}
 		foundNet := false
+		isPrivateNet := false
 		netNumber := 0
 		for j, subnet := range knownRoutes {
 			if subnet.Contains(net.ParseIP(ip)) {
@@ -70,11 +76,23 @@ func ingest(db *sql.DB, hostListFilename string) {
 				netNumber = j
 			}
 		}
-		if foundNet != true {
+		for _, privNet := range rfc1918Blocks {
+			if privNet.Contains(net.ParseIP(ip)) {
+				log.Info("Skipping rfc1918 netblock for %v: %v", name, ip)
+				isPrivateNet = true
+				break
+			}
+		}
+		if foundNet != true && isPrivateNet != true {
 			route, asn, netName := getWhois(ip)
+			if route == "" {
+				log.Errorf("Couldn't parse data for %v, skipping", name)
+				failed = append(failed, name)
+				continue
+			}
 			_, routeNet, err := net.ParseCIDR(route)
 			if err != nil {
-				log.Fatal("Invalid CIDR")
+				log.Fatalf("Invalid CIDR for route %s", route)
 			}
 			netNumber = len(knownRoutes)
 			_, err = netStmt.Exec(netNumber, route, asn, netName)
@@ -87,6 +105,7 @@ func ingest(db *sql.DB, hostListFilename string) {
 		i++
 	}
 	tx.Commit()
+	return failed
 }
 
 func getFirstIp(name string) string {
@@ -105,9 +124,9 @@ func getWhois(ip string) (string, string, string) {
 	var route string
 	var owner string
 	var asn string
-	routeRE := regexp.MustCompile(`(?m:^route6?: +(.+)$)`)
-	asnRE := regexp.MustCompile(`(?m:^origin: +(.+)$)`)
-	ownerRE := regexp.MustCompile(`(?m:^as-name: +(.+)$)`)
+	routeRE := regexp.MustCompile(`(?m:^route6?:\s+(.+)$)`)
+	asnRE := regexp.MustCompile(`(?m:^origin:\s+(.+)$)`)
+	ownerRE := regexp.MustCompile(`(?m:^as-name:\s+(.+)$)`)
 	path, err := exec.LookPath("whois")
 	if err != nil {
 		log.Fatal("Must have `whois` binary in $PATH")
@@ -165,6 +184,12 @@ func main() {
 	defer db.Close()
 
 	initRecords(db)
-	ingest(db, *domainList)
+	failed := ingest(db, *domainList)
+	if len(failed) != 0 {
+		fmt.Println("The following domains failed to enumerate correctly:")
+		for _, failDomain := range failed {
+			fmt.Println(failDomain)
+		}
+	}
 	os.Exit(0)
 }

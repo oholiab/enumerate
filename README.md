@@ -47,6 +47,10 @@ This is a pretty dumb tool which will always take the first of multiple records
 for any given lookup - so for instance if `whois` returns multiple route
 advertisements, you'll only ever get one.
 
+Additionally, some IP addresses won't resolve using the RADB whois lookup that
+enumerate uses - domains which resolve to an IP correctly but fail to return
+whois data will be listed as failed at the end.
+
 Largely though, the point of the tool is enumeration of the ASs for a given
 domain, so this isn't too much of a problem - treat it as a jumping off point
 for further investigation.
